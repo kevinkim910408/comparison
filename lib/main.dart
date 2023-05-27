@@ -1,19 +1,15 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
-import 'memo_service.dart';
+import 'book.dart';
+import 'book_service.dart';
 
-late SharedPreferences prefs;
-
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  prefs = await SharedPreferences.getInstance();
+void main() {
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (context) => MemoService()),
+        ChangeNotifierProvider(create: (context) => BookService()),
       ],
       child: const MyApp(),
     ),
@@ -21,7 +17,7 @@ void main() async {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -32,76 +28,94 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// 홈 페이지
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  HomePage({Key? key}) : super(key: key);
 
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
+  var bottomNavIndex = 0;
   @override
   Widget build(BuildContext context) {
-    return Consumer<MemoService>(
-      builder: (context, memoService, child) {
-        // memoService로 부터 memoList 가져오기
-        List<Memo> memoList = memoService.memoList;
+    return Scaffold(
+      body: [
+        SearchPage(),
+        LikedBookPage(),
+      ].elementAt(bottomNavIndex),
+      bottomNavigationBar: BottomNavigationBar(
+        selectedItemColor: Colors.black,
+        unselectedItemColor: Colors.grey,
+        showUnselectedLabels: true,
+        selectedFontSize: 12,
+        unselectedFontSize: 12,
+        iconSize: 28,
+        type: BottomNavigationBarType.fixed,
+        onTap: (value) {
+          setState(() {
+            bottomNavIndex = value;
+          });
+        },
+        items: [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.search),
+            label: '검색',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.star),
+            label: '좋아요',
+          ),
+        ],
+        currentIndex: bottomNavIndex,
+      ),
+    );
+  }
+}
 
+class SearchPage extends StatelessWidget {
+  SearchPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<BookService>(
+      builder: (context, bookService, child) {
         return Scaffold(
           appBar: AppBar(
-            title: Text("mymemo"),
+            backgroundColor: Colors.white,
+            toolbarHeight: 80,
+            title: TextField(
+              onSubmitted: (value) {
+                bookService.search(value);
+              },
+              cursorColor: Colors.grey,
+              decoration: InputDecoration(
+                prefixIcon: Icon(Icons.search, color: Colors.grey),
+                hintText: "작품, 감독, 배우, 컬렉션, 유저 등",
+                border: OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.white),
+                  borderRadius: BorderRadius.all(Radius.circular(10)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.grey),
+                  borderRadius: BorderRadius.all(Radius.circular(10)),
+                ),
+              ),
+            ),
           ),
-          body: memoList.isEmpty
-              ? Center(child: Text("메모를 작성해 주세요"))
-              : ListView.builder(
-                  itemCount: memoList.length, // memoList 개수 만큼 보여주기
-                  itemBuilder: (context, index) {
-                    Memo memo = memoList[index]; // index에 해당하는 memo 가져오기
-                    return ListTile(
-                      // 메모 고정 아이콘
-                      leading: IconButton(
-                        icon: Icon(memo.isPinned
-                            ? CupertinoIcons.pin_fill
-                            : CupertinoIcons.pin),
-                        onPressed: () {
-                          memoService.updatePinMemo(index: index);
-                        },
-                      ),
-                      // 메모 내용 (최대 3줄까지만 보여주도록)
-                      title: Text(
-                        memo.content,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      onTap: () {
-                        // 아이템 클릭시
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => DetailPage(
-                              index: index,
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-          floatingActionButton: FloatingActionButton(
-            child: Icon(Icons.add),
-            onPressed: () {
-              // + 버튼 클릭시 메모 생성 및 수정 페이지로 이동
-              memoService.createMemo(content: '');
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => DetailPage(
-                    index: memoService.memoList.length - 1,
-                  ),
-                ),
-              );
-            },
+          body: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: ListView.separated(
+              itemCount: bookService.bookList.length,
+              separatorBuilder: (context, index) {
+                return Divider();
+              },
+              itemBuilder: (context, index) {
+                if (bookService.bookList.isEmpty) return SizedBox();
+                Book book = bookService.bookList.elementAt(index);
+                return BookTile(book: book);
+              },
+            ),
           ),
         );
       },
@@ -109,83 +123,97 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-// 메모 생성 및 수정 페이지
-class DetailPage extends StatelessWidget {
-  DetailPage({super.key, required this.index});
+class BookTile extends StatelessWidget {
+  const BookTile({
+    Key? key,
+    required this.book,
+  }) : super(key: key);
 
-  final int index;
-
-  TextEditingController contentController = TextEditingController();
+  final Book book;
 
   @override
   Widget build(BuildContext context) {
-    MemoService memoService = context.read<MemoService>();
-    Memo memo = memoService.memoList[index];
+    BookService bookService = context.read<BookService>();
 
-    contentController.text = memo.content;
-
-    return Scaffold(
-      appBar: AppBar(
-        actions: [
-          IconButton(
-            onPressed: () {
-              // 삭제 버튼 클릭시
-              showDeleteDialog(context, memoService);
-            },
-            icon: Icon(Icons.delete),
-          )
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: TextField(
-          controller: contentController,
-          decoration: InputDecoration(
-            hintText: "메모를 입력하세요",
-            border: InputBorder.none,
+    return ListTile(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => WebViewPage(
+              url: book.previewLink.replaceFirst("http", "https"),
+            ),
           ),
-          autofocus: true,
-          maxLines: null,
-          expands: true,
-          keyboardType: TextInputType.multiline,
-          onChanged: (value) {
-            // 텍스트필드 안의 값이 변할 때
-            memoService.updateMemo(index: index, content: value);
-          },
-        ),
+        );
+      },
+      leading: Image.network(
+        book.thumbnail,
+        fit: BoxFit.fitHeight,
+      ),
+      title: Text(
+        book.title,
+        style: TextStyle(fontSize: 16),
+      ),
+      subtitle: Text(
+        book.subtitle,
+        style: TextStyle(color: Colors.grey),
+      ),
+      trailing: IconButton(
+        onPressed: () {
+          bookService.toggleLikeBook(book: book);
+        },
+        icon: bookService.likedBookList.map((book) => book.id).contains(book.id)
+            ? Icon(
+                Icons.star,
+                color: Colors.amber,
+              )
+            : Icon(Icons.star_border),
       ),
     );
   }
+}
 
-  void showDeleteDialog(BuildContext context, MemoService memoService) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text("정말로 삭제하시겠습니까?"),
-          actions: [
-            // 취소 버튼
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
+class LikedBookPage extends StatelessWidget {
+  const LikedBookPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<BookService>(
+      builder: (context, bookService, child) {
+        return Scaffold(
+          body: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: ListView.separated(
+              itemCount: bookService.likedBookList.length,
+              separatorBuilder: (context, index) {
+                return Divider();
               },
-              child: Text("취소"),
-            ),
-            // 확인 버튼
-            TextButton(
-              onPressed: () {
-                memoService.deleteMemo(index: index);
-                Navigator.pop(context); // 팝업 닫기
-                Navigator.pop(context); // HomePage 로 가기
+              itemBuilder: (context, index) {
+                if (bookService.likedBookList.isEmpty) return SizedBox();
+                Book book = bookService.likedBookList.elementAt(index);
+                return BookTile(book: book);
               },
-              child: Text(
-                "확인",
-                style: TextStyle(color: Colors.pink),
-              ),
             ),
-          ],
+          ),
         );
       },
+    );
+  }
+}
+
+class WebViewPage extends StatelessWidget {
+  WebViewPage({super.key, required this.url});
+
+  String url;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.grey,
+        title: Text(url),
+      ),
+      body: WebView(initialUrl: url),
     );
   }
 }
