@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+
 import 'package:provider/provider.dart';
+
 import 'package:webview_flutter/webview_flutter.dart';
 
 import 'book.dart';
+
 import 'book_service.dart';
 
 void main() {
@@ -37,6 +40,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   var bottomNavIndex = 0;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -112,7 +116,9 @@ class SearchPage extends StatelessWidget {
               },
               itemBuilder: (context, index) {
                 if (bookService.bookList.isEmpty) return SizedBox();
+
                 Book book = bookService.bookList.elementAt(index);
+
                 return BookTile(book: book);
               },
             ),
@@ -155,7 +161,7 @@ class BookTile extends StatelessWidget {
         style: TextStyle(fontSize: 16),
       ),
       subtitle: Text(
-        book.subtitle,
+        "${book.authors.join(",")} ${book.publisheDate}",
         style: TextStyle(color: Colors.grey),
       ),
       trailing: IconButton(
@@ -190,7 +196,9 @@ class LikedBookPage extends StatelessWidget {
               },
               itemBuilder: (context, index) {
                 if (bookService.likedBookList.isEmpty) return SizedBox();
+
                 Book book = bookService.likedBookList.elementAt(index);
+
                 return BookTile(book: book);
               },
             ),
